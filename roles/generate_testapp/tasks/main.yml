@@ -1,0 +1,51 @@
+---
+- name: Copy application Expect script
+  copy: src=generate_app.exp dest=/tmp/generate_app.exp
+  sudo: false
+
+- name: Copy entity Expect script
+  copy: src=generate_entity.exp dest=/tmp/generate_entity.exp
+  sudo: false
+
+- name: Make application folder
+  file: path=/tmp/testapp state=directory
+  sudo: false
+
+- name: Generate application
+  command: chdir=/tmp/testapp /tmp/generate_app.exp
+  sudo: false
+
+- name: Generate entity
+  command: chdir=/tmp/testapp /tmp/generate_entity.exp
+  sudo: false
+
+- name: Build application
+  shell: chdir=/tmp/testapp SBT_OPTS="-XX:+CMSClassUnloadingEnabled -XX:PermSize=256M -XX:MaxPermSize=512M" ./sbt clean assembly
+  sudo: false
+
+- name: Run application
+  shell: chdir=/tmp/testapp nohup java -jar target/scala-2.10/yourapp-assembly-0.1.0-SNAPSHOT.jar  >app.log 2>&1 &
+  sudo: false
+  async: 10
+  poll: 0
+
+- name: Wait for application
+  wait_for: port=8080 delay=60 timeout=600
+
+- name: Create entity
+  uri: url=http://localhost:8080/yourapp/yourentities method=POST
+       body='{"myattr":"mymessage"}' HEADER_Content-Type="application/json" status_code=201
+
+- name: Create entity with empty id (simulating AngularJS behavior)
+  uri: url=http://localhost:8080/yourapp/yourentities method=POST
+       body='{"id":"", "myattr":"mymessage"}' HEADER_Content-Type="application/json" status_code=201
+
+- name: Update entity
+  uri: url=http://localhost:8080/yourapp/yourentities/2 method=PUT
+       body='{"id":2, "myattr":"yourmessage"}' HEADER_Content-Type="application/json"
+
+- name: Delete entity
+  uri: url=http://localhost:8080/yourapp/yourentities/1 method=DELETE status_code=204
+
+- name: Get entities
+  uri: url=http://localhost:8080/yourapp/yourentities
